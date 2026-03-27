@@ -3,7 +3,6 @@ import logging
 import os
 import os.path as osp
 
-import evaluate
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -11,7 +10,6 @@ import torch.nn.functional as F
 from ogb.linkproppred import Evaluator
 from torch.utils.data import DataLoader, TensorDataset
 from torch_geometric.utils import subgraph
-from torchmetrics.functional import retrieval_reciprocal_rank as mrr
 from transformers import EarlyStoppingCallback
 from transformers import Trainer as HugTrainer
 from transformers import TrainingArguments

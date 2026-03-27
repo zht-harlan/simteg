@@ -3,7 +3,6 @@ import logging
 import os.path as osp
 from typing import List, Optional
 
-import evaluate
 import numpy as np
 import torch
 import torch.distributed as dist

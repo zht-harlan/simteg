@@ -5,7 +5,6 @@ import os.path as osp
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-import evaluate
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -18,7 +17,7 @@ from transformers import Trainer as HugTrainer
 from transformers import TrainingArguments
 
 from ..model import get_model_class
-from ..utils import EmbeddingHandler, is_dist
+from ..utils import EmbeddingHandler, classification_metrics, is_dist
 
 logger = logging.getLogger(__name__)
 
@@ -90,12 +89,14 @@ class Trainer(ABC):
         pass
 
     def compute_metrics(self, eval_pred):
-        metric = evaluate.load("accuracy")
         logits, labels = eval_pred
         if isinstance(logits, tuple):
             logits = logits[0]
         predictions = logits.argmax(-1)
-        return metric.compute(predictions=predictions, references=labels)
+        return classification_metrics(
+            torch.as_tensor(labels),
+            torch.as_tensor(predictions),
+        )
 
     def inference(self, dataset, embs_path):
         x_embs_name = f"x_embs.pt"
@@ -117,18 +118,16 @@ class Trainer(ABC):
         return logits_embs, x_embs
 
     def _evaluate(self, logits, y):
-        def accuracy(logits, y_true):
-            y_pred = logits.argmax(dim=-1, keepdim=True)
-            acc = y_pred.eq(y_true.view_as(y_pred)).sum() / y_true.shape[0]
-            return acc.item()
-
         results = dict()
         for split in ["train", "valid", "test"]:
             split_idx = self.split_idx[split]
-            acc = accuracy(logits[split_idx], y[split_idx])
-            results[f"{split}_acc"] = acc
+            y_true = y[split_idx].view(-1)
+            y_pred = logits[split_idx].argmax(dim=-1)
+            metrics = classification_metrics(y_true, y_pred)
+            results[f"{split}_acc"] = metrics["acc"]
+            results[f"{split}_macro_f1"] = metrics["macro_f1"]
             if logits.dtype is not torch.half:
-                loss = F.cross_entropy(logits[split_idx], y[split_idx].view(-1)).item()
+                loss = F.cross_entropy(logits[split_idx], y_true).item()
                 results[f"{split}_loss"] = loss
         return results
 
@@ -171,4 +170,12 @@ class Trainer(ABC):
         gc.collect()
         torch.cuda.empty_cache()
         torch.save(self.model.state_dict(), self.ckpt_path)
-        return results["test_acc"], results["valid_acc"]
+        test_metrics = {
+            "acc": results["test_acc"],
+            "macro_f1": results["test_macro_f1"],
+        }
+        valid_metrics = {
+            "acc": results["valid_acc"],
+            "macro_f1": results["valid_macro_f1"],
+        }
+        return test_metrics, valid_metrics

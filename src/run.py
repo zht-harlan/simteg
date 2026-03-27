@@ -34,14 +34,28 @@ def cleanup():
 
 def load_data(args):
     assert args.dataset in [
-        "ogbn-arxiv", "ogbl-citation2", "ogbn-products", "ogbn-arxiv-tape"
+        "ogbn-arxiv",
+        "ogbl-citation2",
+        "ogbn-products",
+        "ogbn-arxiv-tape",
+        "cora",
+        "pubmed",
+        "amazon-photo",
     ]
+    if args.dataset in ["cora", "pubmed", "amazon-photo"] and args.model_type not in GNN_LIST:
+        raise NotImplementedError(
+            f"{args.dataset} currently only supports GNN/MLP models because this repository has no text pipeline for it."
+        )
     tokenize = args.model_type not in GNN_LIST
     data, split_idx, evaluator = load_data_bundle(
         args.dataset,
         root=args.data_folder,
         tokenizer=args.pretrained_repo,
         tokenize=tokenize)
+    if args.task_type == "node_cls":
+        args.num_labels = int(data.y.view(-1).max().item()) + 1
+    if not args.use_bert_x and not args.use_giant_x and not args.use_gpt_preds:
+        args.num_feats = data.x.size(-1)
     # process data
     if args.dataset == "ogbn-arxiv":
         transform = T.ToUndirected()

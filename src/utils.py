@@ -8,6 +8,7 @@ from typing import List, Union
 import colorlog
 import torch
 import torch.distributed as dist
+from sklearn.metrics import f1_score
 
 
 def dict_append(d: dict, u: dict):
@@ -15,6 +16,19 @@ def dict_append(d: dict, u: dict):
         if key in d.keys():
             d[key].append(value)
     return d
+
+
+def classification_metrics(y_true: torch.Tensor, y_pred: torch.Tensor):
+    y_true = y_true.view(-1).cpu()
+    y_pred = y_pred.view(-1).cpu()
+    acc = y_pred.eq(y_true).sum().item() / y_true.numel()
+    macro_f1 = f1_score(y_true.numpy(), y_pred.numpy(), average="macro", zero_division=0)
+    return {"acc": acc, "macro_f1": macro_f1}
+
+
+class SimpleNodeEvaluator:
+    def eval(self, inputs):
+        return classification_metrics(inputs["y_true"], inputs["y_pred"])
 
 
 @contextmanager

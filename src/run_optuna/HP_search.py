@@ -43,11 +43,11 @@ class HP_search(ABC):
         # trainer
         Trainer = get_trainer_class(args)
         trainer = Trainer(args, data, split_idx, evaluator, trial=trial)
-        test_acc, valid_acc = trainer.train()
+        _, valid_metrics = trainer.train()
         del trainer, data, split_idx, evaluator
         torch.cuda.empty_cache()
         gc.collect()
-        return valid_acc
+        return valid_metrics["acc"]
 
     @abstractmethod
     def setup_search_space(self, args, trial):

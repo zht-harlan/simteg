@@ -5,6 +5,7 @@ from .ogbl_citation2 import OgblCitation2WithText
 from .ogbn_arxiv import OgbnArxivWithText
 from .ogbn_arxiv_tape import OgbnArxivWithTAPE
 from .ogbn_products import OgbnProductsWithText
+from .pyg_node_cls import load_pyg_node_dataset
 
 
 def load_dataset(name, root="data", tokenizer=None, tokenize=True):
@@ -19,6 +20,8 @@ def load_dataset(name, root="data", tokenizer=None, tokenize=True):
 
 
 def load_data_bundle(name, root="data", tokenizer=None, tokenize=True):
+    if name in ["cora", "pubmed", "amazon-photo"]:
+        return load_pyg_node_dataset(name, root=root)
     dataset = load_dataset(name, root=root, tokenizer=tokenizer, tokenize=tokenize)
     if name in ["ogbl-citation2"]:
         return dataset.data, dataset.get_edge_split(), LinkEvaluator(name)

@@ -5,7 +5,6 @@ import os
 import os.path as osp
 import shutil
 
-import evaluate
 import numpy as np
 import optuna
 import torch
@@ -20,7 +19,7 @@ from transformers import Trainer as HugTrainer
 from transformers import TrainingArguments
 
 from ..model import get_model_class
-from ..utils import EmbeddingHandler, is_dist
+from ..utils import EmbeddingHandler, classification_metrics, is_dist
 from .trainer import Trainer
 
 logger = logging.getLogger(__name__)
@@ -245,26 +244,14 @@ class GNNSamplingTrainer:  # single gpu
             torch.save(out, osp.join(embs_dir, f"logits_seed{self.args.random_seed}.pt"))
             logger.warning(f"saved logits to {embs_dir}/logits{self.args.random_seed}.pt")
 
-        train_acc = self.evaluator.eval(
-            {
-                "y_true": y_true[self.split_idx["train"]],
-                "y_pred": y_pred[self.split_idx["train"]],
-            }
-        )["acc"]
-        val_acc = self.evaluator.eval(
-            {
-                "y_true": y_true[self.split_idx["valid"]],
-                "y_pred": y_pred[self.split_idx["valid"]],
-            }
-        )["acc"]
-        test_acc = self.evaluator.eval(
-            {
-                "y_true": y_true[self.split_idx["test"]],
-                "y_pred": y_pred[self.split_idx["test"]],
-            }
-        )["acc"]
+        metrics = {}
+        for split in ["train", "valid", "test"]:
+            metrics[split] = classification_metrics(
+                y_true[self.split_idx[split]],
+                y_pred[self.split_idx[split]],
+            )
 
-        return train_acc, val_acc, test_acc
+        return metrics
 
     def train(self, return_value="valid"):
         self.model = self._prepare_model()
@@ -272,18 +259,26 @@ class GNNSamplingTrainer:  # single gpu
         self.model.reset_parameters()
         self.train_loader, self.subgraph_loader = self._prepare_dataloader()
         self.optimizer = self._prepare_optimizer()
-        best_val_acc = final_test_acc = 0
+        best_val_acc = -1
         accumulate_patience = 0
         for epoch in range(1, self.args.gnn_epochs + 1):
             loss, acc = self.training_step(epoch)
             logger.info(f"Epoch {epoch:02d}, Loss: {loss:.4f}, Train Acc: {acc:.4f}")
             if epoch >= self.args.gnn_eval_warmup and epoch % self.args.gnn_eval_interval == 0:
-                train_acc, val_acc, test_acc = self.eval()
-                logger.info(f"Epoch: {epoch:02d} Train: {train_acc:.4f}, Val: {val_acc:.4f}, Test: {test_acc:.4f}")
-                if val_acc > best_val_acc:
+                metrics = self.eval()
+                logger.info(
+                    "Epoch: %02d Train: %.4f/%.4f, Val: %.4f/%.4f, Test: %.4f/%.4f",
+                    epoch,
+                    metrics["train"]["acc"],
+                    metrics["train"]["macro_f1"],
+                    metrics["valid"]["acc"],
+                    metrics["valid"]["macro_f1"],
+                    metrics["test"]["acc"],
+                    metrics["test"]["macro_f1"],
+                )
+                if metrics["valid"]["acc"] > best_val_acc:
                     accumulate_patience = 0
-                    best_val_acc = val_acc
-                    final_test_acc = test_acc
+                    best_val_acc = metrics["valid"]["acc"]
                     torch.save(
                         self.model.state_dict(),
                         os.path.join(self.args.ckpt_dir, f"model_seed{self.args.random_seed}.pt"),
@@ -293,15 +288,23 @@ class GNNSamplingTrainer:  # single gpu
                     if accumulate_patience >= 10:
                         break
                 if self.trial is not None:
-                    self.trial.report(val_acc, epoch)
+                    self.trial.report(metrics["valid"]["acc"], epoch)
                     if self.trial.should_prune():
                         raise optuna.exceptions.TrialPruned()
         self.model.load_state_dict(
             torch.load(os.path.join(self.args.ckpt_dir, f"model_seed{self.args.random_seed}.pt"))
         )
-        train_acc, val_acc, test_acc = self.eval(save_out=True)
-        logger.info(f"best_train_acc: {train_acc:.4f}, best_valid_acc: {val_acc:.4f}, best_test_acc: {test_acc:.4f}")
-        return test_acc, val_acc
+        metrics = self.eval(save_out=True)
+        logger.info(
+            "best_train_acc: %.4f, best_train_macro_f1: %.4f, best_valid_acc: %.4f, best_valid_macro_f1: %.4f, best_test_acc: %.4f, best_test_macro_f1: %.4f",
+            metrics["train"]["acc"],
+            metrics["train"]["macro_f1"],
+            metrics["valid"]["acc"],
+            metrics["valid"]["macro_f1"],
+            metrics["test"]["acc"],
+            metrics["test"]["macro_f1"],
+        )
+        return metrics["test"], metrics["valid"]
 
 
 class MLPTrainer:
@@ -355,53 +358,56 @@ class MLPTrainer:
         out = self.model.inference(self.device, self.all_loader)
         y_true = self.data.y.cpu()
         y_pred = out.argmax(dim=-1, keepdim=True)
+        metrics = {}
+        for split in ["train", "valid", "test"]:
+            metrics[split] = classification_metrics(
+                y_true[self.split_idx[split]],
+                y_pred[self.split_idx[split]],
+            )
 
-        train_acc = self.evaluator.eval(
-            {
-                "y_true": y_true[self.split_idx["train"]],
-                "y_pred": y_pred[self.split_idx["train"]],
-            }
-        )["acc"]
-        val_acc = self.evaluator.eval(
-            {
-                "y_true": y_true[self.split_idx["valid"]],
-                "y_pred": y_pred[self.split_idx["valid"]],
-            }
-        )["acc"]
-        test_acc = self.evaluator.eval(
-            {
-                "y_true": y_true[self.split_idx["test"]],
-                "y_pred": y_pred[self.split_idx["test"]],
-            }
-        )["acc"]
-
-        return train_acc, val_acc, test_acc
+        return metrics
 
     def train(self, return_value="valid"):
         self.model = self._prepare_model()
         self.model.to(self.device)
         self.train_loader, self.all_loader = self._prepare_dataloader()
         self.optimizer = self._prepare_optimizer()
-        best_val_acc = final_test_acc = 0
+        best_val_acc = -1
         accumulate_patience = 0
         for epoch in range(1, self.args.gnn_epochs + 1):
             loss, acc = self.training_step(epoch)
             logger.info(f"Epoch {epoch:02d}, Loss: {loss:.4f}, Train Acc: {acc:.4f}")
             if epoch > 0:
-                train_acc, val_acc, test_acc = self.eval()
-                logger.info(f"Epoch: {epoch:02d} Train: {train_acc:.4f}, Val: {val_acc:.4f}, Test: {test_acc:.4f}")
-                if val_acc > best_val_acc:
+                metrics = self.eval()
+                logger.info(
+                    "Epoch: %02d Train: %.4f/%.4f, Val: %.4f/%.4f, Test: %.4f/%.4f",
+                    epoch,
+                    metrics["train"]["acc"],
+                    metrics["train"]["macro_f1"],
+                    metrics["valid"]["acc"],
+                    metrics["valid"]["macro_f1"],
+                    metrics["test"]["acc"],
+                    metrics["test"]["macro_f1"],
+                )
+                if metrics["valid"]["acc"] > best_val_acc:
                     accumulate_patience = 0
-                    best_val_acc = val_acc
-                    final_test_acc = test_acc
+                    best_val_acc = metrics["valid"]["acc"]
+                    torch.save(self.model.state_dict(), os.path.join(self.args.ckpt_dir, "model.pt"))
                 else:
                     accumulate_patience += 1
                     if accumulate_patience >= 5:
                         break
                 if self.trial is not None:
-                    self.trial.report(val_acc, epoch)
+                    self.trial.report(metrics["valid"]["acc"], epoch)
                     if self.trial.should_prune():
                         raise optuna.exceptions.TrialPruned()
-        logger.info(f"best_val_acc: {best_val_acc:.4f}, final_test_acc: {final_test_acc:.4f}")
-        torch.save(self.model.state_dict(), os.path.join(self.args.ckpt_dir, "model.pt"))
-        return final_test_acc, best_val_acc
+        self.model.load_state_dict(torch.load(os.path.join(self.args.ckpt_dir, "model.pt")))
+        metrics = self.eval()
+        logger.info(
+            "best_valid_acc: %.4f, best_valid_macro_f1: %.4f, final_test_acc: %.4f, final_test_macro_f1: %.4f",
+            metrics["valid"]["acc"],
+            metrics["valid"]["macro_f1"],
+            metrics["test"]["acc"],
+            metrics["test"]["macro_f1"],
+        )
+        return metrics["test"], metrics["valid"]

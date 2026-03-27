@@ -23,7 +23,14 @@ SAMPLING_GNN_LIST = ["GraphSAGE", "GCN"]
 DECOUPLING_GNN_LIST = ["GAMLP", "SAGN", "SIGN", "SGC"]
 
 LINK_PRED_DATASETS = ["ogbl-citation2"]
-NODE_CLS_DATASETS = ["ogbn-arxiv", "ogbn-products", "ogbn-arxiv-tape"]
+NODE_CLS_DATASETS = [
+    "ogbn-arxiv",
+    "ogbn-products",
+    "ogbn-arxiv-tape",
+    "cora",
+    "pubmed",
+    "amazon-photo",
+]
 
 
 def parse_args():
@@ -252,6 +259,21 @@ def _set_dataset_specific_args(args):
     elif args.dataset == "ogbl-citation2":
         args.num_feats = 128
         args.task_type = "link_pred"
+    elif args.dataset == "cora":
+        args.num_labels = 7
+        args.num_feats = 1433
+        args.expected_valid_acc = 0.7
+        args.task_type = "node_cls"
+    elif args.dataset == "pubmed":
+        args.num_labels = 3
+        args.num_feats = 500
+        args.expected_valid_acc = 0.75
+        args.task_type = "node_cls"
+    elif args.dataset == "amazon-photo":
+        args.num_labels = 8
+        args.num_feats = 745
+        args.expected_valid_acc = 0.9
+        args.task_type = "node_cls"
 
     hidden_size_dict = {
         "all-roberta-large-v1": 1024,
