@@ -238,8 +238,9 @@ def _set_pretrained_repo(args):
     if args.model_type in dict.keys():
         args.pretrained_repo = dict[args.model_type]
     else:
-        assert args.lm_type in dict.keys()
-        # assert args.pretrained_repo in dict[args.lm_type]
+        if args.use_bert_x:
+            assert args.lm_type in dict.keys()
+        # pure gnn/mlp training does not need a pretrained repo
     return args
 
 
