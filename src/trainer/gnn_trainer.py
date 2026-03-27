@@ -6,7 +6,6 @@ import os.path as osp
 import shutil
 
 import numpy as np
-import optuna
 import torch
 import torch.distributed as dist
 import torch.nn.functional as F
@@ -23,6 +22,11 @@ from ..utils import EmbeddingHandler, classification_metrics, is_dist
 from .trainer import Trainer
 
 logger = logging.getLogger(__name__)
+
+try:
+    import optuna
+except ImportError:  # optional unless hp search is used
+    optuna = None
 
 
 class Dataset(torch.utils.data.Dataset):

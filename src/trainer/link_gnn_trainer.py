@@ -5,7 +5,6 @@ import os.path as osp
 from itertools import chain
 
 import numpy as np
-import optuna
 import torch
 import torch.nn.functional as F
 from ogb.linkproppred import Evaluator, PygLinkPropPredDataset
@@ -22,6 +21,11 @@ from tqdm.auto import tqdm
 from ..model import get_model_class
 
 logger = logging.getLogger(__name__)
+
+try:
+    import optuna
+except ImportError:  # optional unless hp search is used
+    optuna = None
 
 
 ##########################################
