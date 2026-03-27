@@ -1,4 +1,5 @@
 import gc
+import csv
 import json
 import logging
 import os
@@ -57,6 +58,107 @@ def print_metrics(metrics: dict, metric_type):
     )
 
 
+def summarize_metrics(metrics):
+    return {
+        key: {
+            "mean": float(np.mean(value)),
+            "std": float(np.std(value)),
+            "values": [float(v) for v in value],
+        }
+        for key, value in metrics.items()
+    }
+
+
+def save_results(args, seeds, val_metrics, test_metrics):
+    if int(os.getenv("RANK", -1)) > 0:
+        return
+
+    results = {
+        "dataset": args.dataset,
+        "model_type": args.model_type,
+        "suffix": args.suffix,
+        "n_exps": args.n_exps,
+        "start_seed": args.start_seed,
+        "seeds": seeds,
+        "val": summarize_metrics(val_metrics),
+        "test": summarize_metrics(test_metrics),
+        "runs": [],
+    }
+
+    for idx, seed in enumerate(seeds):
+        run_result = {
+            "run_idx": idx,
+            "seed": int(seed),
+            "val": {key: float(val_metrics[key][idx]) for key in val_metrics},
+            "test": {key: float(test_metrics[key][idx]) for key in test_metrics},
+        }
+        results["runs"].append(run_result)
+
+    results_path = osp.join(args.output_dir, "results.json")
+    with open(results_path, "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2)
+
+    summary_csv_path = osp.join(".", "results_summary.csv")
+    fieldnames = [
+        "dataset",
+        "model_type",
+        "suffix",
+        "n_exps",
+        "start_seed",
+        "seeds",
+        "val_acc_mean",
+        "val_acc_std",
+        "val_macro_f1_mean",
+        "val_macro_f1_std",
+        "test_acc_mean",
+        "test_acc_std",
+        "test_macro_f1_mean",
+        "test_macro_f1_std",
+        "results_json",
+    ]
+    row = {
+        "dataset": args.dataset,
+        "model_type": args.model_type,
+        "suffix": args.suffix,
+        "n_exps": args.n_exps,
+        "start_seed": args.start_seed,
+        "seeds": " ".join(str(seed) for seed in seeds),
+        "val_acc_mean": results["val"].get("acc", {}).get("mean"),
+        "val_acc_std": results["val"].get("acc", {}).get("std"),
+        "val_macro_f1_mean": results["val"].get("macro_f1", {}).get("mean"),
+        "val_macro_f1_std": results["val"].get("macro_f1", {}).get("std"),
+        "test_acc_mean": results["test"].get("acc", {}).get("mean"),
+        "test_acc_std": results["test"].get("acc", {}).get("std"),
+        "test_macro_f1_mean": results["test"].get("macro_f1", {}).get("mean"),
+        "test_macro_f1_std": results["test"].get("macro_f1", {}).get("std"),
+        "results_json": results_path,
+    }
+
+    existing_rows = []
+    if osp.exists(summary_csv_path):
+        with open(summary_csv_path, "r", encoding="utf-8", newline="") as f:
+            existing_rows = list(csv.DictReader(f))
+
+    existing_rows = [
+        existing
+        for existing in existing_rows
+        if not (
+            existing["dataset"] == args.dataset
+            and existing["model_type"] == args.model_type
+            and existing["suffix"] == args.suffix
+        )
+    ]
+    existing_rows.append(row)
+
+    with open(summary_csv_path, "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(existing_rows)
+
+    logger.critical(f"saved structured results to {results_path}")
+    logger.critical(f"updated summary csv at {summary_csv_path}")
+
+
 def main(args):
     set_logging()
     if is_dist():
@@ -72,12 +174,14 @@ def main(args):
     else:
         val_metrics_list = {"acc": [], "macro_f1": []}
         test_metrics_list = {"acc": [], "macro_f1": []}
+    seeds = []
 
     for i, random_seed in enumerate(range(args.n_exps)):
         random_seed += args.start_seed
         set_seed(random_seed)
         logger.critical(f"{i}-th run with seed {random_seed}")
         args.random_seed = random_seed
+        seeds.append(random_seed)
         logger.info(args)
 
         test_metrics, val_metrics = train(args, return_value="test")
@@ -91,6 +195,8 @@ def main(args):
     cleanup()
     print_metrics(val_metrics_list, "Final Val")
     print_metrics(test_metrics_list, "Final Test")
+    if args.dataset not in LINK_PRED_DATASETS:
+        save_results(args, seeds, val_metrics_list, test_metrics_list)
 
 
 if __name__ == "__main__":
