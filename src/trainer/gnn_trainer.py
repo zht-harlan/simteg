@@ -94,7 +94,7 @@ class GNNDecouplingTrainer(Trainer):
         total_batch_size = self.world_size * self.args.gnn_batch_size
         train_steps = len(self.train_set) // total_batch_size + 1
         eval_steps = train_steps * self.args.gnn_eval_interval
-        warmup_steps = self.args.gnn_warmup_ratio * train_steps
+        warmup_steps = max(0, int(self.args.gnn_warmup_ratio * train_steps))
         logger.info(f"eval_steps: {eval_steps}, train_steps: {train_steps}, warmup_steps: {warmup_steps}")
         training_args = TrainingArguments(
             seed=self.args.random_seed,
