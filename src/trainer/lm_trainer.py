@@ -73,10 +73,11 @@ class LMTrainer(Trainer):
         total_batch_size = self.world_size * self.args.batch_size * self.args.accum_interval
         eval_steps = self.args.eval_patience // total_batch_size
         train_steps = len(self.train_set) // total_batch_size + 1
-        warmup_steps = self.args.warmup_ratio * train_steps
+        warmup_steps = max(0, int(self.args.warmup_ratio * train_steps))
         training_args = TrainingArguments(
             seed=self.args.random_seed,
             output_dir=self.args.output_dir,
+            report_to="none",
             optim="adamw_torch",
             evaluation_strategy="steps",
             eval_steps=eval_steps,

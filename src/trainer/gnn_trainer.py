@@ -99,6 +99,7 @@ class GNNDecouplingTrainer(Trainer):
         training_args = TrainingArguments(
             seed=self.args.random_seed,
             output_dir=self.args.output_dir,
+            report_to="none",
             optim="adamw_torch",
             evaluation_strategy="steps",
             eval_steps=eval_steps,
