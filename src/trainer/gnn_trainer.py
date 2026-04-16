@@ -4,6 +4,7 @@ import logging
 import os
 import os.path as osp
 import shutil
+import torch.multiprocessing as mp
 
 import numpy as np
 import torch
@@ -22,6 +23,11 @@ from ..utils import EmbeddingHandler, classification_metrics, is_dist
 from .trainer import Trainer
 
 logger = logging.getLogger(__name__)
+
+try:
+    mp.set_sharing_strategy("file_system")
+except (RuntimeError, ValueError):
+    pass
 
 try:
     import optuna
