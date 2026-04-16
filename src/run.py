@@ -41,8 +41,11 @@ def load_data(args):
         "cora",
         "pubmed",
         "amazon-photo",
+        "children",
+        "history",
+        "photo",
     ]
-    if args.dataset in ["cora", "pubmed", "amazon-photo"] and args.model_type not in GNN_LIST:
+    if args.dataset in ["cora", "pubmed", "amazon-photo", "children", "history", "photo"] and args.model_type not in GNN_LIST:
         raise NotImplementedError(
             f"{args.dataset} currently only supports GNN/MLP models because this repository has no text pipeline for it."
         )

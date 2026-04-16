@@ -20,7 +20,7 @@ def load_dataset(name, root="data", tokenizer=None, tokenize=True):
 
 
 def load_data_bundle(name, root="data", tokenizer=None, tokenize=True):
-    if name in ["cora", "pubmed", "amazon-photo"]:
+    if name in ["cora", "pubmed", "amazon-photo", "children", "history", "photo"]:
         return load_pyg_node_dataset(name, root=root)
     dataset = load_dataset(name, root=root, tokenizer=tokenizer, tokenize=tokenize)
     if name in ["ogbl-citation2"]:

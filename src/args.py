@@ -30,6 +30,9 @@ NODE_CLS_DATASETS = [
     "cora",
     "pubmed",
     "amazon-photo",
+    "children",
+    "history",
+    "photo",
 ]
 
 
@@ -274,6 +277,9 @@ def _set_dataset_specific_args(args):
         args.num_labels = 8
         args.num_feats = 745
         args.expected_valid_acc = 0.9
+        args.task_type = "node_cls"
+    elif args.dataset in ["children", "history", "photo"]:
+        args.expected_valid_acc = 0.7
         args.task_type = "node_cls"
 
     hidden_size_dict = {
