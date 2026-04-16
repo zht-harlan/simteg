@@ -5,10 +5,14 @@ from contextlib import contextmanager
 from datetime import datetime
 from typing import List, Union
 
-import colorlog
 import torch
 import torch.distributed as dist
 from sklearn.metrics import f1_score
+
+try:
+    import colorlog
+except ImportError:
+    colorlog = None
 
 
 def dict_append(d: dict, u: dict):
@@ -99,11 +103,14 @@ def set_logging():
 
     root.setLevel(logging.INFO)
     log_format = "[%(name)s %(asctime)s] %(message)s"
-    color_format = "%(log_color)s" + log_format
 
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
-    console_handler.setFormatter(colorlog.ColoredFormatter(color_format))
+    if colorlog is not None:
+        color_format = "%(log_color)s" + log_format
+        console_handler.setFormatter(colorlog.ColoredFormatter(color_format))
+    else:
+        console_handler.setFormatter(logging.Formatter(log_format))
     console_handler.addFilter(RankFilter())
     root.addHandler(console_handler)
 
