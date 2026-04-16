@@ -38,10 +38,10 @@ class SimpleNodeEvaluator:
 @contextmanager
 def dist_barrier_context():
     rank = int(os.getenv("RANK", -1))
-    if rank not in [0, -1]:
+    if rank not in [0, -1] and dist.is_available() and dist.is_initialized():
         dist.barrier()
     yield
-    if rank == 0:
+    if rank == 0 and dist.is_available() and dist.is_initialized():
         dist.barrier()
 
 
@@ -50,7 +50,7 @@ def mkdirs_if_not_exists(path: str):
     if rank <= 0:
         if not os.path.exists(path):
             os.makedirs(path)
-    if rank >= 0:
+    if rank >= 0 and dist.is_available() and dist.is_initialized():
         dist.barrier()
 
 
@@ -60,14 +60,16 @@ class EmbeddingHandler:
         rank = int(os.environ["RANK"]) if is_dist() else -1
         if rank <= 0 and not os.path.exists(self.emb_path):
             os.makedirs(self.emb_path)
-        dist.barrier()
+        if is_dist() and dist.is_available() and dist.is_initialized():
+            dist.barrier()
 
     def save(self, emb: torch.Tensor, saved_name: str):
         saved_name = os.path.join(self.emb_path, saved_name)
         rank = int(os.environ["RANK"]) if is_dist() else -1
         if rank <= 0:
             torch.save(emb, saved_name)
-        dist.barrier()
+        if is_dist() and dist.is_available() and dist.is_initialized():
+            dist.barrier()
 
     def load(self, saved_name: str):
         if not self.has(saved_name):

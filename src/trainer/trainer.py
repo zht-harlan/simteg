@@ -141,7 +141,8 @@ class Trainer(ABC):
         return logits_embs, x_embs, results  # x_embs is None in GNNTrainer
 
     def train_once(self):
-        dist.barrier()
+        if is_dist() and dist.is_available() and dist.is_initialized():
+            dist.barrier()
         if self.trial is not None:
             self.trainer._hp_search_setup(self.trial)
         train_output = self.trainer.train()
