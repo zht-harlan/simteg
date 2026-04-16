@@ -108,7 +108,7 @@ class GNNDecouplingTrainer(Trainer):
             learning_rate=self.args.gnn_lr,
             weight_decay=self.args.gnn_weight_decay,
             load_best_model_at_end=True,
-            metric_for_best_model="eval_accuracy",
+            metric_for_best_model="eval_acc",
             gradient_accumulation_steps=1,
             label_smoothing_factor=self.args.gnn_label_smoothing,
             save_total_limit=1,
