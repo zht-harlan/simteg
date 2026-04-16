@@ -40,6 +40,8 @@ class SIGN(torch.nn.Module):
         out_feats = args.num_labels
         hidden = args.gnn_dim_hidden
         dropout = args.gnn_dropout
+        self.in_feats = in_feats
+        self.num_hops = num_hops
 
         self.dropout = nn.Dropout(dropout)
         self.prelu = nn.PReLU()
@@ -50,6 +52,8 @@ class SIGN(torch.nn.Module):
         self.project = FeedForwardNet(num_hops * hidden, hidden, out_feats, ffn_layers, dropout)
 
     def forward(self, feats):
+        if isinstance(feats, torch.Tensor):
+            feats = [x for x in torch.split(feats, self.in_feats, dim=-1)]
         feats = [self.input_drop(feat) for feat in feats]
         hidden = []
         for feat, ff in zip(feats, self.inception_ffs):
